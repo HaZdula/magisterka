@@ -14,6 +14,7 @@ parser.add_argument('--flavor', type=str, help='LP, LPFT, FT')
 parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--download', default=False, type=bool, help='download datasets')
+parser.add_argument('--moco', type=str, help='path to moco checkpoint')
 
 args = parser.parse_args()
 
@@ -22,6 +23,7 @@ flavor = args.flavor
 lr = args.lr
 momentum = args.momentum
 download = args.download
+moco_path = args.moco
 
 device = (
     "cuda"
@@ -42,7 +44,20 @@ trainloader10, testloader10 = utils.load_cifar_10_dataset(download=download)
 _, testloader101 = utils.load_cifar_10_1_dataset(download=download)
 
 # Pretrained model
-model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)  # vgg11_bn(pretrained=True)
+model = models.resnet50()#weights=ResNet50_Weights.IMAGENET1K_V2)  # vgg11_bn(pretrained=True)
+
+checkpoint_dict = torch.load(moco_path)['state_dict']
+
+# rename moco pre-trained keys
+for k in list(checkpoint_dict.keys()):
+    if k.startswith('module.encoder_q') and not k.startswith('module.encoder_q.fc'):
+        # remove prefix
+        checkpoint_dict[k[len("module.encoder_q."):]] = checkpoint_dict[k]
+    # delete renamed or unused k
+    del checkpoint_dict[k]
+
+model.load_state_dict(checkpoint_dict, strict=False)
+
 
 if flavor == "LPFT":
     num_epochs = int(num_epochs / 2)
