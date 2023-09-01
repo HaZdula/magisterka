@@ -13,6 +13,7 @@ parser.add_argument('--epochs', default=1, type=int, help='number of epochs tp t
 parser.add_argument('--flavor', type=str, help='LP, LPFT, FT')
 parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
+parser.add_argument('--download', default=False, type=bool, help='download datasets')
 
 args = parser.parse_args()
 
@@ -20,6 +21,7 @@ num_epochs = args.epochs
 flavor = args.flavor
 lr = args.lr
 momentum = args.momentum
+download = args.download
 
 device = (
     "cuda"
@@ -36,8 +38,8 @@ transform = transforms.Compose(
      ])
 
 # load datasets
-trainloader10, testloader10 = utils.load_cifar_10_dataset(download=False)
-_, testloader101 = utils.load_cifar_10_1_dataset(download=False)
+trainloader10, testloader10 = utils.load_cifar_10_dataset(download=download)
+_, testloader101 = utils.load_cifar_10_1_dataset(download=download)
 
 # Pretrained model
 model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)  # vgg11_bn(pretrained=True)
