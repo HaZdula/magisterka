@@ -1,7 +1,5 @@
-import io
 import os
 import os.path
-import pickle
 
 import numpy as np
 
@@ -10,6 +8,14 @@ from PIL import Image
 import torch.utils.data as data
 
 from torchvision.datasets.utils import download_url, check_integrity
+import os
+import os.path
+
+import numpy as np
+import torch.utils.data as data
+from PIL import Image
+from torchvision.datasets.utils import download_url, check_integrity
+
 
 def load_new_test_data(root, version='default'):
     data_path = root
