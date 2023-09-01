@@ -96,5 +96,5 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
 cifar101_acc = test(model, testloader)
 
 # save results to file with timestamp
-with open(f"results/FT_{int(time.time())}.txt", "w") as f:
+with open(f"results/FT_{num_epochs}epochs_{int(time.time())}.txt", "w") as f:
     f.write(f"CIFAR-10:{cifar10_acc}\nCIFAR-10.1:{cifar101_acc}\n")

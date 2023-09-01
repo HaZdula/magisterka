@@ -130,5 +130,5 @@ if not os.path.exists(results_dir):
 
 
 # save results to file with timestamp
-with open(f"{results_dir}/LPFT_{int(time.time())}.txt", "w") as f:
+with open(f"{results_dir}/LPFT_{num_epochs}epochs_{int(time.time())}.txt", "w") as f:
     f.write(f"CIFAR-10:{cifar10_acc}\nCIFAR-10.1:{cifar101_acc}\n")
