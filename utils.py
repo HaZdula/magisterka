@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
+from tqdm import tqdm
 
 from cifar10_1_dataset import CIFAR10_1
 
-from tqdm import tqdm
+
 def load_cifar_10_dataset(root='./data',
                           download=True,
                           transform=transforms.Compose([transforms.ToTensor()]),
@@ -65,7 +66,7 @@ def train(model, trainloader, num_epochs, lr=0.001, momentum=0.9):
     model.train()
 
     for epoch in tqdm(range(num_epochs)):
-        for i, data in enumerate(trainloader, 0):
+        for i, data in tqdm(enumerate(trainloader, 0)):
             inputs, labels = data
             optimizer.zero_grad()
             outputs = model(inputs)
