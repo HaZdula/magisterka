@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -39,6 +41,19 @@ def load_cifar_10_1_dataset(root='./data',
     return trainloader, testloader
 
 
+def load_STL_10_dataset(root='./data',
+                            download=True,
+                            transform=transforms.Compose([transforms.ToTensor()]),
+                            batch_size=64):
+    trainset = torchvision.datasets.STL10(root=root, split='train',
+                            download=download, transform=transform)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=2)
+    testset = torchvision.datasets.STL10(root=root, split='test',
+                            download=download, transform=transform)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=2)
+    return trainloader, testloader
+
+
 def test(model, testloader):
     model.eval()
     correct_test_predictions = 0
@@ -55,11 +70,11 @@ def test(model, testloader):
 
     # Calculate accuracy for the testing epoch
     test_epoch_accuracy = correct_test_predictions / total_test_samples
-    print(f'Accuracy: {test_epoch_accuracy * 100}% on CIFAR-10')
+    print(f'Accuracy: {test_epoch_accuracy * 100}% on {testloader.dataset}')
     return test_epoch_accuracy
 
 
-def train(model, trainloader, num_epochs, lr=0.001, momentum=0.9):
+def train(model, trainloader, num_epochs, lr=0.001, momentum=0.9, savefile=None):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 
@@ -73,3 +88,9 @@ def train(model, trainloader, num_epochs, lr=0.001, momentum=0.9):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            l=loss.item()
+            with open(savefile, 'a') as f:
+                # add header if file is empty
+                if os.stat(savefile).st_size == 0:
+                    f.write("epoch;loss;lr;momentum\n")
+                f.write(f"{epoch};{l};{lr};{momentum}\n")
