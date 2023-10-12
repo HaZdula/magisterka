@@ -190,7 +190,7 @@ class STL10(torchvision.datasets.STL10):
             download: bool = False,
     ) -> None:
         super(STL10, self).__init__(root, transform=transform,
-                                    target_transform=target_transform)
+                                    target_transform=target_transform, download=download)
         self.split = verify_str_arg(split, "split", self.splits)
         self.folds = self._verify_folds(folds)
 

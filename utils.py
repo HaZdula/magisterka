@@ -7,7 +7,7 @@ import torchvision
 import torchvision.transforms as transforms
 from tqdm import tqdm
 
-from cifar10_1_dataset import CIFAR10_1
+from cifar10_1_dataset import CIFAR10_1, STL10
 
 
 def load_cifar_10_dataset(root='./data',
@@ -42,14 +42,27 @@ def load_cifar_10_1_dataset(root='./data',
 
 
 def load_STL_10_dataset(root='./data',
-                            download=True,
-                            transform=transforms.Compose([transforms.ToTensor()]),
-                            batch_size=64):
+                        download=True,
+                        transform=transforms.Compose([transforms.ToTensor()]),
+                        batch_size=64):
     trainset = torchvision.datasets.STL10(root=root, split='train',
-                            download=download, transform=transform)
+                                          download=download, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=2)
     testset = torchvision.datasets.STL10(root=root, split='test',
-                            download=download, transform=transform)
+                                         download=download, transform=transform)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=2)
+    return trainloader, testloader
+
+
+def load_STL_10_relabeled_dataset(root='./data',
+                                  download=True,
+                                  transform=transforms.Compose([transforms.ToTensor()]),
+                                  batch_size=64):
+    trainset = STL10(root=root, split='train',
+                     download=download, transform=transform)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=2)
+    testset = STL10(root=root, split='test',
+                    download=download, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=2)
     return trainloader, testloader
 
@@ -88,7 +101,7 @@ def train(model, trainloader, num_epochs, lr=0.001, momentum=0.9, savefile=None)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            l=loss.item()
+            l = loss.item()
             with open(savefile, 'a') as f:
                 # add header if file is empty
                 if os.stat(savefile).st_size == 0:
