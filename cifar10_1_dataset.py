@@ -2,6 +2,7 @@ import os
 import os.path
 
 import numpy as np
+import torchvision
 
 from PIL import Image
 
@@ -145,3 +146,60 @@ class CIFAR10_1(data.Dataset):
         return fmt_str
 
 #x = CIFAR10_1("/home/hania/studia/mag", download=True)
+
+
+
+
+# STL dataset, but remove label not in CIFAR-10, and remap to CIFAR-10 labels.
+# Adapted from https://github.com/pytorch/vision/blob/master/torchvision/datasets/stl10.py
+# We copy this instead of just modifying .data .labels in case the code gets modified.
+
+from PIL import Image
+import os
+import os.path
+import numpy as np
+from typing import Any, Callable, Optional, Tuple
+
+from torchvision.datasets.vision import VisionDataset
+from torchvision.datasets.utils import check_integrity, download_and_extract_archive, verify_str_arg
+
+
+class STL10(torchvision.datasets.STL10):
+
+    def make_labels_like_cifar(self):
+        stl_to_cifar_indices = np.array([0, 2, 1, 3, 4, 5, 7, -1, 8, 9])
+        self.labels = stl_to_cifar_indices[self.labels]
+        indices = np.where(self.labels != -1)
+        self.labels = self.labels[indices]
+        self.data = self.data[indices]
+        new_classes = ['']*10
+        new_classes[6] = 'NONE'
+        for i in range(len(stl_to_cifar_indices)):
+            v = stl_to_cifar_indices[i]
+            if v != -1:
+                new_classes[v] = self.classes[i]
+        self.classes = new_classes
+
+    def __init__(
+            self,
+            root: str,
+            split: str = "train",
+            folds: Optional[int] = None,
+            transform: Optional[Callable] = None,
+            target_transform: Optional[Callable] = None,
+            download: bool = False,
+    ) -> None:
+        super(STL10, self).__init__(root, transform=transform,
+                                    target_transform=target_transform)
+        self.split = verify_str_arg(split, "split", self.splits)
+        self.folds = self._verify_folds(folds)
+
+        if download:
+            self.download()
+        elif not self._check_integrity():
+            raise RuntimeError(
+                'Dataset not found or corrupted. '
+                'You can use download=True to download it')
+
+        # Make labels like CIFAR.
+        self.make_labels_like_cifar()
