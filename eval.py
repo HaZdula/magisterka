@@ -39,7 +39,7 @@ def main():
 
     for f in os.listdir(checkpoint_dir):
         model = models.resnet50()
-        checkpoint_dict = torch.load(f)['state_dict']
+        checkpoint_dict = torch.load(checkpoint_dir + '/' + f)['state_dict']
         model.load_state_dict(checkpoint_dict, strict=False)
         model.eval()
 
