@@ -10,11 +10,11 @@ import utils
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--epochs', default=1, type=int, help='number of epochs tp train for, dividable by 2 for LPFT')
-parser.add_argument('--flavor', type=str, help='LP, LPFT, FT')
+parser.add_argument('--flavor', type=str, help='LP, LPFT, FT or baseline-kaiming, baseline-xavier')
 #parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
-parser.add_argument('--download', default=False, type=bool, help='download datasets')
-parser.add_argument('--moco', type=str, help='path to moco checkpoint')
+parser.add_argument('--momentum', default=0.9, type=float, help='momentum, default 0.9')
+parser.add_argument('--download', default=False, type=bool, help='download datasets, default False')
+parser.add_argument('--moco', type=str, help='path to moco checkpoint, if not baseline')
 
 args = parser.parse_args()
 
@@ -59,19 +59,37 @@ _, testloader101 = utils.load_cifar_10_1_dataset(download=download, transform=ci
 _, testloaderSTL = utils.load_STL_10_dataset(download=download, transform=stl_transform)
 
 # Pretrained model
-model = models.resnet50()  # weights=ResNet50_Weights.IMAGENET1K_V2)  # vgg11_bn(pretrained=True)
+model = models.resnet50()
 
-checkpoint_dict = torch.load(moco_path)['state_dict']
+if flavor == 'baseline-xavier':
+    # init Xavier/Glorot weights
+    for m in model.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            torch.nn.init.xavier_normal_(m.weight)
+        elif isinstance(m, torch.nn.BatchNorm2d):
+            torch.nn.init.constant_(m.weight, 1)
+            torch.nn.init.constant_(m.bias, 0)
+elif flavor == 'baseline-kaiming':
+    # init He weights
+    for m in model.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            torch.nn.init.kaiming_normal_(m.weight)
+        elif isinstance(m, torch.nn.BatchNorm2d):
+            torch.nn.init.constant_(m.weight, 1)
+            torch.nn.init.constant_(m.bias, 0)
+else:
+    # load moco checkpoint
+    checkpoint_dict = torch.load(moco_path)['state_dict']
 
-# rename moco pre-trained keys
-for k in list(checkpoint_dict.keys()):
-    if k.startswith('module.encoder_q') and not k.startswith('module.encoder_q.fc'):
-        # remove prefix
-        checkpoint_dict[k[len("module.encoder_q."):]] = checkpoint_dict[k]
-    # delete renamed or unused k
-    del checkpoint_dict[k]
+    # rename moco pre-trained keys
+    for k in list(checkpoint_dict.keys()):
+        if k.startswith('module.encoder_q') and not k.startswith('module.encoder_q.fc'):
+            # remove prefix
+            checkpoint_dict[k[len("module.encoder_q."):]] = checkpoint_dict[k]
+        # delete renamed or unused k
+        del checkpoint_dict[k]
 
-model.load_state_dict(checkpoint_dict, strict=False)
+    model.load_state_dict(checkpoint_dict, strict=False)
 
 loss_dir = "losses"
 loss_save_path = f"{loss_dir}/{flavor}.csv"
@@ -102,8 +120,12 @@ for lr in SWEEP_LRS:
 
         utils.train(model, trainloader10, num_epochs, lr, momentum, loss_save_path)
 
-    # restore num_epochs for saving results
-    num_epochs = args.epochs
+    if "baseline" in flavor:
+        utils.train(model, trainloader10, num_epochs, lr, momentum, loss_save_path)
+
+    # restore num_epochs for saving results if LPFT
+    if flavor == "LPFT":
+        num_epochs = args.epochs
     print('Finished Training')
 
     cifar10_acc = utils.test(model, testloader10)
