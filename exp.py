@@ -56,7 +56,7 @@ stl_transform = transforms.Compose(
 # load datasets
 trainloader10, testloader10 = utils.load_cifar_10_dataset(download=download, transform=cifar_transform)
 _, testloader101 = utils.load_cifar_10_1_dataset(download=download, transform=cifar_transform)
-_, testloaderSTL = utils.load_STL_10_dataset(download=download, transform=stl_transform)
+_, testloaderSTL = utils.load_STL_10_relabeled_dataset(download=download, transform=stl_transform)
 
 # Pretrained model
 model = models.resnet50()
