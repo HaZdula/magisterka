@@ -31,20 +31,24 @@ def main():
 
     download = False
     # load datasets
-    # trainloader10, testloader10 = utils.load_cifar_10_dataset(download=download, transform=cifar_transform)
-    # _, testloader101 = utils.load_cifar_10_1_dataset(download=download, transform=cifar_transform)
+    _, testloader10 = utils.load_cifar_10_dataset(download=download, transform=cifar_transform)
+    _, testloader101 = utils.load_cifar_10_1_dataset(download=download, transform=cifar_transform)
     #_, testloaderSTL = utils.load_STL_10_dataset(download=download, transform=stl_transform)
     _, testloaderSTL = utils.load_STL_10_relabeled_dataset(download=download, transform=stl_transform)
     checkpoint_dir = "results/checkpoints"
 
     for f in os.listdir(checkpoint_dir):
+        if not f.startswith("baseline"):
+            continue
         model = models.resnet50()
         checkpoint_dict = torch.load(checkpoint_dir + '/' + f)
         model.load_state_dict(checkpoint_dict, strict=False)
         model.eval()
 
         stl_acc = utils.test(model, testloaderSTL)
-        print(f"{f}: {stl_acc}")
+        c10_acc = utils.test(model, testloader10)
+        c101_acc = utils.test(model, testloader101)
+        print(f"{f}: {c10_acc}, {c101_acc}, {stl_acc}")
 
 
 if __name__ == '__main__':
