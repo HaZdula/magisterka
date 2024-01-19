@@ -81,17 +81,11 @@ print(f"Using {device} device")
 
 # Instantiate the model
 model_with_embeddings = SimpleNN()
-
-# Set the model to evaluation mode
 model_with_embeddings.eval()
 
-# Define the number of samples you want to load (e.g., 1000)
 num_samples = 1000
-
-# Create a subset of the dataset with the desired number of samples
 subset_indices = list(range(num_samples))
 subset = torch.utils.data.Subset(train_dataset, subset_indices)
-
 
 # pass mnist dataset to model
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=False, sampler=torch.utils.data.SubsetRandomSampler(subset_indices))
@@ -105,7 +99,7 @@ for images, labels in train_loader:
     # Pass the input through the model
     embeddings = model_with_embeddings(images)
     # Store only the final layer embeddings
-    intermediate_embeddings.append(embeddings[-1])
+    intermediate_embeddings.append(embeddings[1])
 
 
 #plot pca
