@@ -1,20 +1,79 @@
+import json
+import uuid
+
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
-
-model_saved = True
-model_saved_clsf = False
-checkpoint_path = "./checkpoints/"
-
-# check if path exists
 import os
 
-if not os.path.exists(checkpoint_path):
-    os.makedirs(checkpoint_path)
+
+def test(w, model, F):
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
+    train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+    classifier.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            logits = model(F(inputs, w))
+            _, predicted = torch.max(logits.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    print(f"Accuracy: {100 * correct / total} on w={w}")
+    return correct / total
+
+
+def train_classifier(params_dict):
+    id = "simple1" #uuid.uuid4()
+    # Load MNIST dataset
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
+    train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Initialize the model, loss function, and optimizer
+    criterion = params_dict['criterion']
+    optimizer = params_dict['optimizer']
+    # add early stopping
+    early_stopping = params_dict['early_stopping']
+    epochs = params_dict['epochs']
+    classifier = params_dict['model']
+    save_model = params_dict['save_model']
+    w_train = params_dict['w_train']
+
+    classifier.train()
+
+    # Training loop
+    prev_loss = np.inf
+    for epoch in range(epochs):
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
+            inp = F(inputs, w_train)
+            logits = classifier(inp)
+            loss = criterion(logits, labels)
+            loss.backward()
+            if early_stopping and prev_loss < loss.item():
+                break
+
+        optimizer.step()
+        print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
+
+    if save_model:
+        torch.save(classifier.state_dict(), checkpoint_path + f"clsf_{id}.pth")
+        # add entry to models_manager in checkpoints
+        # with open(checkpoint_path + "models_manager.csv", "a") as f:
+        #     f.write(f"{id}, clsf_{id}.pth, {json.dumps(params_dict)}\n")
+
+    classifier.eval()
+    return id, classifier
 
 
 # Define the CNN model
@@ -36,6 +95,12 @@ class SimpleClassifier(nn.Module):
         logits = self.fc2(embedding)
         return logits, embedding
 
+
+model_saved = True
+checkpoint_path = "./checkpoints/"
+
+if not os.path.exists(checkpoint_path):
+    os.makedirs(checkpoint_path)
 
 # Set device (GPU if available, else CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -95,19 +160,10 @@ if not model_saved:
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
 
-            # Zero the gradients
             optimizer.zero_grad()
-
-            # Forward pass
             logits, embedding = model2(inputs)
-
-            # Calculate the loss
             loss = criterion(logits, labels)
-
-            # Backward pass
             loss.backward()
-
-            # Update weights
             optimizer.step()
 
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
@@ -133,88 +189,64 @@ def F(data, w):
 
 # chcemy dobrać sobie różne w, takie by symulować różnie przesunięte rozkłady - w=0 to rozkład z modelu 2, w=1 to rozkład z modelu 1
 # i spojrzeć jak działa LP FT LPFT
-# zatem
 
-w_train = 75e-2
-learning_rate = 0.0008
+classifier = nn.Sequential(
+                   nn.Linear(embedding_size, 28),
+                   nn.ReLU(),
+                   nn.Linear(28, 28),
+                   nn.Linear(28, 10),
+                   nn.ReLU(),
+               ).to(device)
+w_train = 0.5
+learning_rate = 0.05
 momentum = 0.9
-epochs = 10
+params_dict = {'w_train': w_train,
+               'training_subset': {0, 1},
+               'learning_rate': learning_rate,
+               'momentum': momentum,
+               'epochs': 10,
+               'batch_size': 64,
+               'embedding_size': 32,
+               'save_model': True,
+               'checkpoint_path': "./checkpoints/",
+               'device': 'cuda' if torch.cuda.is_available() else 'cpu',
+               'model': classifier,
+               'criterion': nn.CrossEntropyLoss(),
+               'optimizer': optim.SGD(classifier.parameters(), lr=learning_rate, momentum=momentum),
+               'early_stopping': False,
+               }
 
-# mlp for classification
-if not model_saved_clsf:
-    classifier = nn.Sequential(
-        nn.Linear(embedding_size, 28),
-        nn.ReLU(),
-        nn.Linear(28, 10),
-        nn.ReLU(),
-    ).to(device)
+# wizard = pd.read_csv("./checkpoints/models_manager.csv")
+# check if param_dict column already contains params_dict
+# select column with param_dict, check if any row contains params_dict
 
-    # Load MNIST dataset
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
-    train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+# if wizard.loc[wizard.loc[['param_dict']] == json.dumps(params_dict)].shape[0] > 0:
+#     print("Model already trained")
+#     cid = wizard.loc[wizard['param_dict'] == json.dumps(params_dict)]['id']
+#     classifier.load_state_dict(torch.load(checkpoint_path + f"clsf_{cid}.pth"))
+# else:
 
-    # Initialize the model, loss function, and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(classifier.parameters(), lr=learning_rate, momentum=momentum)
-        # optim.Adam(classifier.parameters(), lr=learning_rate)
-    # add early stopping
-
-    classifier.train()
-
-    # Training loop
-    prev_loss = np.inf
-    for epoch in range(epochs):
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            optimizer.zero_grad()
-            inp = F(inputs, w_train)
-            logits = classifier(inp)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
-            if loss.item() < prev_loss:
-                prev_loss = loss.item()
-            else:
-                break
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
-
-    torch.save(classifier.state_dict(), checkpoint_path + f"classifier_w_{w_train}_{learning_rate}_{momentum}.pth")
-else:
-    classifier = nn.Sequential(
-        nn.Linear(embedding_size, 28),
-        nn.ReLU(),
-        nn.Linear(28, 10),
-        nn.ReLU(),
-    ).to(device)
-    classifier.load_state_dict(torch.load(checkpoint_path + f"classifier_w_{w_train}.pth"))
-    classifier.eval()
+cid, classifier = train_classifier(params_dict)
+print(f"Training classifier on w={w_train}")
 
 
-# Test loop
-correct = 0
-total = 0
+accs = []
+weigts = []
+for w in np.linspace(0, 1, 11):
+    accs.append(test(w=w, model=classifier, F=F))
+    weigts.append(w)
 
-classifier.eval()
+import matplotlib.pyplot as plt
+plt.plot(weigts, accs)
+plt.xlabel("w")
+plt.ylabel("accuracy")
+# add line at w_train
+plt.axvline(x=w_train, color='r', linestyle='--')
+plt.show()
 
+results_dir = "./results/"
+if not os.path.exists(results_dir):
+    os.makedirs(results_dir)
 
-def test(w, model):
-    classifier.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            logits = model(F(inputs, w))
-            _, predicted = torch.max(logits.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    print(f"Accuracy: {100 * correct / total} on w={w}, model_trained_on {w_train}")
-    return correct / total
-
-
-test(w=0.1, model=classifier)
-test(w=0.3, model=classifier)
-test(w=0.5, model=classifier)
-test(w=0.7, model=classifier)
-test(w=0.9, model=classifier)
+with open(results_dir + "results.csv", "a") as f:
+    f.write(f"{cid}, {weigts}, {accs}\n")
