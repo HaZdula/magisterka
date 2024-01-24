@@ -32,7 +32,7 @@ def test(w, model, F):
 
 
 def train_classifier(params_dict):
-    id = "simple1" #uuid.uuid4()
+    id = "simple1"  # uuid.uuid4()
     # Load MNIST dataset
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
     train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
@@ -190,13 +190,33 @@ def F(data, w):
 # chcemy dobrać sobie różne w, takie by symulować różnie przesunięte rozkłady - w=0 to rozkład z modelu 2, w=1 to rozkład z modelu 1
 # i spojrzeć jak działa LP FT LPFT
 
+# @HERE @TODO make this real class
 classifier = nn.Sequential(
-                   nn.Linear(embedding_size, 28),
-                   nn.ReLU(),
-                   nn.Linear(28, 28),
-                   nn.Linear(28, 10),
-                   nn.ReLU(),
-               ).to(device)
+    nn.Linear(embedding_size, 28),
+    nn.ReLU(),
+    nn.Linear(28, 28),
+    nn.Linear(28, 10),
+    nn.ReLU(),
+).to(device)
+
+
+class Classifier(nn.Module):
+    def __init__(self, embedding_size=32):
+        super(Classifier, self).__init__()
+
+        self.fc1 = nn.Linear(embedding_size, 28)
+        self.fc2 = nn.Linear(28, 28)
+        self.fc3 = nn.Linear(28, 10)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        logits = self.fc3(x)
+        return logits
+
+
+# classifier = Classifier(embedding_size).to(device)
+
 w_train = 0.5
 learning_rate = 0.05
 momentum = 0.9
@@ -226,8 +246,11 @@ params_dict = {'w_train': w_train,
 #     classifier.load_state_dict(torch.load(checkpoint_path + f"clsf_{cid}.pth"))
 # else:
 
-cid, classifier = train_classifier(params_dict)
+### BASE TRAINING AND PLOT
+"""
 print(f"Training classifier on w={w_train}")
+cid, classifier = train_classifier(params_dict)
+
 
 
 accs = []
@@ -249,4 +272,134 @@ if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
 with open(results_dir + "results.csv", "a") as f:
-    f.write(f"{cid}, {weigts}, {accs}\n")
+    f.write(f"{cid},{w_train},{weigts},{accs}\n")
+"""
+
+### PRETRAINED MODEL
+# Let clsf trained on w=0.3 be our pretrained model, w=0.5 would be ID
+# @TODO save pretrained model
+w_train = 0.3
+if not os.path.exists(checkpoint_path + "pretrained.pth"):
+    params_dict['w_train'] = w_train
+    params_dict['model'] = classifier
+    params_dict['optimizer'] = optim.SGD(classifier.parameters(), lr=learning_rate, momentum=momentum)
+    params_dict['epochs'] = 10
+    print(f"Training classifier on w={w_train}")
+    cid_pretrained, pretrained_clsf = train_classifier(params_dict)
+    torch.save(pretrained_clsf.state_dict(), checkpoint_path + "pretrained.pth")
+else:
+    pretrained_clsf = nn.Sequential(
+        nn.Linear(embedding_size, 28),
+        nn.ReLU(),
+        nn.Linear(28, 28),
+        nn.Linear(28, 10),
+        nn.ReLU(),
+    ).to(device)
+    pretrained_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+    pretrained_clsf.eval()
+
+### LP
+
+lp_clsf = nn.Sequential(
+    nn.Linear(embedding_size, 28),
+    nn.ReLU(),
+    nn.Linear(28, 28),
+    nn.Linear(28, 10),
+    nn.ReLU(),
+).to(device)
+lp_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+print(lp_clsf.parameters())
+# freeze all layers except last one
+# @TODO fix this
+for param in lp_clsf.parameters():
+    param.requires_grad = False
+# unfreeze last layer
+for param in lp_clsf[-1].parameters():
+    param.requires_grad = True
+
+
+params_dict['w_train'] = 0.5
+params_dict['learning_rate'] = 1e-3
+params_dict['model'] = lp_clsf
+params_dict['optimizer'] = optim.SGD(lp_clsf.parameters(), lr=learning_rate, momentum=momentum)
+params_dict['epochs'] = 20
+
+print(f"Training classifier on {params_dict}")
+_, lp_clsf = train_classifier(params_dict)  # 10 epochs
+
+### LPFT
+lpft_clsf = nn.Sequential(
+    nn.Linear(embedding_size, 28),
+    nn.ReLU(),
+    nn.Linear(28, 28),
+    nn.Linear(28, 10),
+    nn.ReLU(),
+).to(device)
+lpft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+
+# freeze all layers except last one
+for param in lpft_clsf.parameters():
+    param.requires_grad = False
+# unfreeze last layer
+for param in lpft_clsf[-1].parameters():
+    param.requires_grad = True
+
+params_dict['model'] = lpft_clsf
+params_dict['optimizer'] = optim.SGD(lpft_clsf.parameters(), lr=learning_rate, momentum=momentum)
+params_dict['epochs'] = 10
+print(f"Training classifier on {params_dict}")
+_, lpft_clsf = train_classifier(params_dict)  # 10 epochs
+params_dict['model'] = lpft_clsf
+# unfreeze all layers
+for param in lpft_clsf.parameters():
+    param.requires_grad = True
+
+_, lpft_clsf = train_classifier(params_dict)  # +10 epochs
+
+### FT
+ft_clsf = nn.Sequential(
+    nn.Linear(embedding_size, 28),
+    nn.ReLU(),
+    nn.Linear(28, 28),
+    nn.Linear(28, 10),
+    nn.ReLU(),
+).to(device)
+ft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+params_dict['model'] = ft_clsf
+params_dict['optimizer'] = optim.SGD(ft_clsf.parameters(), lr=learning_rate, momentum=momentum)
+params_dict['epochs'] = 20
+print(f"Training classifier on {params_dict}")
+_, ft_clsf = train_classifier(params_dict)  # 10 epochs
+
+### TEST
+
+accs = []
+print("Testing LP")
+for w in np.linspace(0, 1, 11):
+    accs.append(test(w=w, model=lp_clsf, F=F))
+
+print("Testing LPFT")
+for w in np.linspace(0, 1, 11):
+    accs.append(test(w=w, model=lpft_clsf, F=F))
+
+print("Testing FT")
+for w in np.linspace(0, 1, 11):
+    accs.append(test(w=w, model=ft_clsf, F=F))
+
+print("Testing pretrained")
+for w in np.linspace(0, 1, 11):
+    accs.append(test(w=w, model=pretrained_clsf, F=F))
+
+import matplotlib.pyplot as plt
+
+plt.plot(np.linspace(0, 1, 11), accs[:11], label="LP")
+plt.plot(np.linspace(0, 1, 11), accs[11:22], label="LPFT")
+plt.plot(np.linspace(0, 1, 11), accs[22:33], label="FT")
+plt.plot(np.linspace(0, 1, 11), accs[33:], label="pretrained")
+plt.legend()
+plt.xlabel("w")
+plt.ylabel("accuracy")
+# add line at w_train
+plt.axvline(x=0.3, color='r', linestyle='--')
+plt.axvline(x=0.5, color='b', linestyle='--')
+plt.show()
