@@ -95,6 +95,20 @@ class SimpleClassifier(nn.Module):
         logits = self.fc2(embedding)
         return logits, embedding
 
+class SimpleClassifier2(nn.Module):
+    def __init__(self, embedding_size=32):
+        super(SimpleClassifier2, self).__init__()
+
+        self.fc1 = nn.Linear(embedding_size, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 10)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        logits = self.fc3(x)
+        return logits
+
 
 model_saved = True
 checkpoint_path = "./checkpoints/"
@@ -112,6 +126,53 @@ learning_rate = 0.0002
 epochs = 5
 
 # MNIST jest 28x28
+
+def train_embedding(subset_range=None,
+                    epochs=5,
+                    learning_rate=0.0002,
+                    model_class = SimpleClassifier,
+                    embedding_size=32,
+                    model_checkpoint_name="f1.pth",):
+    # select only 0 and 1
+    if subset_range is None:
+        subset_range = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+    train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
+    train_dataset.data = train_dataset.data[train_dataset.targets in subset_range]
+    train_dataset.targets = train_dataset.targets[train_dataset.targets in subset_range]
+
+    # Initialize the model, loss function, and optimizer
+    model = model_class(embedding_size).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model2.parameters(), lr=learning_rate)
+
+    # Training loop
+    for epoch in range(epochs):
+        for inputs, labels in train_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
+            logits, embedding = model(inputs)
+            loss = criterion(logits, labels)
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
+
+    torch.save(model.state_dict(), checkpoint_path + model_checkpoint_name)
+
+
+if os.path.exists(checkpoint_path + "f1.pth"):
+    model1 = SimpleClassifier(embedding_size).to(device)
+    model1.load_state_dict(torch.load(checkpoint_path + "f1.pth"))
+    model1.eval()
+else:
+    train_embedding(subset_range={0,1,2,3,4,5,6,7,8,9}, model_checkpoint_name="f1.pth")
+
+if os.path.exists(checkpoint_path + "f2.pth"):
+    model2 = SimpleClassifier2(embedding_size).to(device)
+    model2.load_state_dict(torch.load(checkpoint_path + "f2.pth"))
+    model2.eval()
+else:
+    train_embedding(subset_range={0,1}, model_checkpoint_name="f2.pth")
 
 if not model_saved:
     # Load MNIST dataset
@@ -145,34 +206,7 @@ if not model_saved:
 
     # F2 model na cyfrach 0 i 1
 
-    # select only 0 and 1
-    train_dataset = MNIST(root='./data', train=True, download=True, transform=transform)
-    train_dataset.data = train_dataset.data[train_dataset.targets < 2]
-    train_dataset.targets = train_dataset.targets[train_dataset.targets < 2]
 
-    # Initialize the model, loss function, and optimizer
-    model2 = SimpleClassifier(embedding_size).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model2.parameters(), lr=learning_rate)
-
-    # Training loop
-    for epoch in range(epochs):
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-
-            optimizer.zero_grad()
-            logits, embedding = model2(inputs)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
-
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
-
-    torch.save(model2.state_dict(), checkpoint_path + "model2.pth")
-
-    # Access embeddings for some test data
-    test_data = next(iter(train_loader))[0][:5].to(device)
-    _, test_embeddings = model2(test_data)
 else:
     model = SimpleClassifier(embedding_size).to(device)
     model.load_state_dict(torch.load(checkpoint_path + "model1.pth"))
@@ -190,32 +224,7 @@ def F(data, w):
 # chcemy dobrać sobie różne w, takie by symulować różnie przesunięte rozkłady - w=0 to rozkład z modelu 2, w=1 to rozkład z modelu 1
 # i spojrzeć jak działa LP FT LPFT
 
-# @HERE @TODO make this real class
-classifier = nn.Sequential(
-    nn.Linear(embedding_size, 28),
-    nn.ReLU(),
-    nn.Linear(28, 28),
-    nn.Linear(28, 10),
-    nn.ReLU(),
-).to(device)
-
-
-class Classifier(nn.Module):
-    def __init__(self, embedding_size=32):
-        super(Classifier, self).__init__()
-
-        self.fc1 = nn.Linear(embedding_size, 28)
-        self.fc2 = nn.Linear(28, 28)
-        self.fc3 = nn.Linear(28, 10)
-
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        logits = self.fc3(x)
-        return logits
-
-
-# classifier = Classifier(embedding_size).to(device)
+classifier = SimpleClassifier2(embedding_size).to(device)
 
 w_train = 0.5
 learning_rate = 0.05
@@ -275,9 +284,10 @@ with open(results_dir + "results.csv", "a") as f:
     f.write(f"{cid},{w_train},{weigts},{accs}\n")
 """
 
+
+
 ### PRETRAINED MODEL
-# Let clsf trained on w=0.3 be our pretrained model, w=0.5 would be ID
-# @TODO save pretrained model
+
 w_train = 0.3
 if not os.path.exists(checkpoint_path + "pretrained.pth"):
     params_dict['w_train'] = w_train
@@ -288,89 +298,84 @@ if not os.path.exists(checkpoint_path + "pretrained.pth"):
     cid_pretrained, pretrained_clsf = train_classifier(params_dict)
     torch.save(pretrained_clsf.state_dict(), checkpoint_path + "pretrained.pth")
 else:
-    pretrained_clsf = nn.Sequential(
-        nn.Linear(embedding_size, 28),
-        nn.ReLU(),
-        nn.Linear(28, 28),
-        nn.Linear(28, 10),
-        nn.ReLU(),
-    ).to(device)
+    pretrained_clsf = SimpleClassifier2(embedding_size).to(device)
     pretrained_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
     pretrained_clsf.eval()
 
 ### LP
-
-lp_clsf = nn.Sequential(
-    nn.Linear(embedding_size, 28),
-    nn.ReLU(),
-    nn.Linear(28, 28),
-    nn.Linear(28, 10),
-    nn.ReLU(),
-).to(device)
-lp_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
-print(lp_clsf.parameters())
-# freeze all layers except last one
-# @TODO fix this
-for param in lp_clsf.parameters():
-    param.requires_grad = False
-# unfreeze last layer
-for param in lp_clsf[-1].parameters():
-    param.requires_grad = True
+if not os.path.exists(checkpoint_path + "lp.pth"):
+    lp_clsf = SimpleClassifier2(embedding_size).to(device)
+    lp_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+    # freeze all layers except last one
+    for param in lp_clsf.parameters():
+        print(param)
+        param.requires_grad = False
+    # unfreeze last layer
+    for param in lp_clsf.fc3.parameters():
+        param.requires_grad = True
 
 
-params_dict['w_train'] = 0.5
-params_dict['learning_rate'] = 1e-3
-params_dict['model'] = lp_clsf
-params_dict['optimizer'] = optim.SGD(lp_clsf.parameters(), lr=learning_rate, momentum=momentum)
-params_dict['epochs'] = 20
+    params_dict['w_train'] = 0.7
+    params_dict['learning_rate'] = 1e-3
+    params_dict['model'] = lp_clsf
+    params_dict['optimizer'] = optim.SGD(lp_clsf.parameters(), lr=learning_rate, momentum=momentum)
+    params_dict['epochs'] = 10
 
-print(f"Training classifier on {params_dict}")
-_, lp_clsf = train_classifier(params_dict)  # 10 epochs
+    print(f"Training classifier on {params_dict}")
+    _, lp_clsf = train_classifier(params_dict)  # 10 epochs
+    torch.save(lp_clsf.state_dict(), checkpoint_path + "lp.pth")
+else:
+    lp_clsf = SimpleClassifier2(embedding_size).to(device)
+    lp_clsf.load_state_dict(torch.load(checkpoint_path + "lp.pth"))
+    lp_clsf.eval()
+
+
 
 ### LPFT
-lpft_clsf = nn.Sequential(
-    nn.Linear(embedding_size, 28),
-    nn.ReLU(),
-    nn.Linear(28, 28),
-    nn.Linear(28, 10),
-    nn.ReLU(),
-).to(device)
-lpft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+if not os.path.exists(checkpoint_path + "lpft.pth"):
+    lpft_clsf = SimpleClassifier2(embedding_size).to(device)
+    lpft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
 
-# freeze all layers except last one
-for param in lpft_clsf.parameters():
-    param.requires_grad = False
-# unfreeze last layer
-for param in lpft_clsf[-1].parameters():
-    param.requires_grad = True
+    # freeze all layers except last one
+    for param in lpft_clsf.parameters():
+        param.requires_grad = False
+    # unfreeze last layer
+    for param in lp_clsf.fc3.parameters():
+        param.requires_grad = True
 
-params_dict['model'] = lpft_clsf
-params_dict['optimizer'] = optim.SGD(lpft_clsf.parameters(), lr=learning_rate, momentum=momentum)
-params_dict['epochs'] = 10
-print(f"Training classifier on {params_dict}")
-_, lpft_clsf = train_classifier(params_dict)  # 10 epochs
-params_dict['model'] = lpft_clsf
-# unfreeze all layers
-for param in lpft_clsf.parameters():
-    param.requires_grad = True
+    params_dict['model'] = lpft_clsf
+    params_dict['optimizer'] = optim.SGD(lpft_clsf.parameters(), lr=learning_rate, momentum=momentum)
+    params_dict['epochs'] = 5
+    params_dict['learning_rate'] = 1e-4
+    print(f"Training classifier on {params_dict}")
+    _, lpft_clsf = train_classifier(params_dict)  # n epochs
+    params_dict['model'] = lpft_clsf
+    # unfreeze all layers
+    for param in lpft_clsf.parameters():
+        param.requires_grad = True
 
-_, lpft_clsf = train_classifier(params_dict)  # +10 epochs
+    _, lpft_clsf = train_classifier(params_dict)  # +n epochs
+    torch.save(lpft_clsf.state_dict(), checkpoint_path + "lpft.pth")
+else:
+    lpft_clsf = SimpleClassifier2(embedding_size).to(device)
+    lpft_clsf.load_state_dict(torch.load(checkpoint_path + "lpft.pth"))
+    lpft_clsf.eval()
+
 
 ### FT
-ft_clsf = nn.Sequential(
-    nn.Linear(embedding_size, 28),
-    nn.ReLU(),
-    nn.Linear(28, 28),
-    nn.Linear(28, 10),
-    nn.ReLU(),
-).to(device)
-ft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
-params_dict['model'] = ft_clsf
-params_dict['optimizer'] = optim.SGD(ft_clsf.parameters(), lr=learning_rate, momentum=momentum)
-params_dict['epochs'] = 20
-print(f"Training classifier on {params_dict}")
-_, ft_clsf = train_classifier(params_dict)  # 10 epochs
-
+if not os.path.exists(checkpoint_path + "ft.pth"):
+    ft_clsf = SimpleClassifier2(embedding_size).to(device)
+    ft_clsf.load_state_dict(torch.load(checkpoint_path + "pretrained.pth"))
+    params_dict['model'] = ft_clsf
+    params_dict['optimizer'] = optim.SGD(ft_clsf.parameters(), lr=learning_rate, momentum=momentum)
+    params_dict['epochs'] = 10
+    print(f"Training classifier on {params_dict}")
+    _, ft_clsf = train_classifier(params_dict)
+    torch.save(ft_clsf.state_dict(), checkpoint_path + "ft.pth")
+else:
+    ft_clsf = SimpleClassifier2(embedding_size).to(device)
+    ft_clsf.load_state_dict(torch.load(checkpoint_path + "ft.pth"))
+    ft_clsf.eval()
 ### TEST
 
 accs = []
@@ -401,5 +406,5 @@ plt.xlabel("w")
 plt.ylabel("accuracy")
 # add line at w_train
 plt.axvline(x=0.3, color='r', linestyle='--')
-plt.axvline(x=0.5, color='b', linestyle='--')
+plt.axvline(x=0.7, color='b', linestyle='--')
 plt.show()
