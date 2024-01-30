@@ -187,9 +187,12 @@ def F(data, w_):
 
 
 def lr_sweep(params_dict_, lr_sweep_range):
+    start_dict = params_dict_['model'].state_dict()
     models = []
     accs = []
     for lr in lr_sweep_range:
+        # make sure to reset model
+        params_dict_['model'].load_state_dict(start_dict)
         params_dict_['learning_rate'] = lr
         print(f"Training classifier on w={params_dict_['w_train']}, lr={params_dict_['learning_rate']}")
         cid, clsf = train_classifier(params_dict_)
