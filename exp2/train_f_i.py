@@ -162,7 +162,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Hyperparameters
 batch_size = 64
-embedding_size = 32
+embedding_size = 2
 
 ### f1 i f2 ###
 
@@ -171,14 +171,14 @@ if os.path.exists(checkpoint_path + "f1.pth"):
     model1.load_state_dict(torch.load(checkpoint_path + "f1.pth"))
     model1.eval()
 else:
-    model1 = train_embedding(subset_range={0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, model_checkpoint_name="f1")
+    model1 = train_embedding(subset_range={0, 1, 2, 3, 4}, model_checkpoint_name="f1")
 
 if os.path.exists(checkpoint_path + "f2.pth"):
     model2 = SimpleClassifier(embedding_size).to(device)
     model2.load_state_dict(torch.load(checkpoint_path + "f2.pth"))
     model2.eval()
 else:
-    model2 = train_embedding(subset_range={0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, model_checkpoint_name="f2")
+    model2 = train_embedding(subset_range={5, 6, 7, 8, 9}, model_checkpoint_name="f2")
 
 
 def F(data, w_):
@@ -193,6 +193,7 @@ def lr_sweep(params_dict_, lr_sweep_range):
     for lr in lr_sweep_range:
         # make sure to reset model
         params_dict_['model'].load_state_dict(start_dict)
+        params_dict_['model'].train()
         params_dict_['learning_rate'] = lr
         print(f"Training classifier on w={params_dict_['w_train']}, lr={params_dict_['learning_rate']}")
         cid, clsf = train_classifier(params_dict_)
@@ -228,7 +229,7 @@ plt.show()
 ### PRETRAINED MODEL
 
 # params
-w_pretrain = 0.4
+w_pretrain = 0.3
 epochs_pretrain = 10
 epochs_transfer = 10
 w_prime = 0.5
@@ -257,9 +258,9 @@ if not os.path.exists(checkpoint_path + "pretrained.pth"):
     params_dict['epochs'] = epochs_pretrain
     models, accs = lr_sweep(params_dict, lr_sweep_range)
     # select best model
-    best_model = models[np.argmax(accs)]
-    best_model.eval()
-    torch.save(best_model.state_dict(), checkpoint_path + "pretrained.pth")
+    pretrained_clsf = models[np.argmax(accs)]
+    pretrained_clsf.eval()
+    torch.save(pretrained_clsf.state_dict(), checkpoint_path + "pretrained.pth")
 
     #print(f"Training pretrained classifier on w={params_dict['w_train']}, lr={params_dict['learning_rate']}")
     #cid_pretrained, pretrained_clsf = train_classifier(params_dict)
