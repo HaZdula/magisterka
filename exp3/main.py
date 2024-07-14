@@ -38,11 +38,11 @@ if __name__ == '__main__':
     ae_test_loader_1 = DataLoader(dataset=train_dataset_1[2000:4000], batch_size=32, shuffle=True)
 
     # Initialize the model, loss function, and optimizer
-    embedding_size = 4
+    embedding_size = 10
     model = Autoencoder(embedding_size).to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0017)
-    epochs = 150
+    epochs = 40#150
 
     # Training loop
     for epoch in range(epochs):
@@ -78,6 +78,22 @@ if __name__ == '__main__':
                    nn.Linear(16, 8),
                    nn.Sigmoid()
                ).to(device)
+    
+    class SimpleClassifier(nn.Module):
+        def __init__(self, embedding_size=32):
+            super(SimpleClassifier, self).__init__()
+
+            self.fc1 = nn.Linear(embedding_size, 32)
+            self.fc2 =nn.Linear(32, 16)
+            self.fc3 = nn.Linear(16, 7)
+
+        def forward(self, x):
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            x = torch.sigmoid(self.fc3(x))
+            return x
+        
+    classifier = SimpleClassifier(embedding_size).to(device)
     
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(classifier.parameters(), lr=0.001)
@@ -133,12 +149,20 @@ if __name__ == '__main__':
 
         print(f"Epoch {epoch+1}/{epochs} loss: {np.mean(epoch_losses)} train accuracy: {train_accuracy} test accuracy: {test_accuracy}")
 
+    # save the base model
+    # create dir if not exists
+    if not os.path.exists("models"):
+        os.makedirs("models")
+    torch.save(classifier.state_dict(), "models/base_model.pth")
 
+    model.eval()
     # Fine-tuning loop
     print("### Fine-tuning ###")
+    # read base model and load it
+    classifier.load_state_dict(torch.load("models/base_model.pth"))
     for epoch in range(epochs):
         
-        model.train()
+        classifier.train()
         epoch_losses = []
         for inputs, labels in cl_train_loader_2:
             inputs = inputs.to(device)
@@ -150,7 +174,7 @@ if __name__ == '__main__':
             optimizer.step()
             epoch_losses.append(loss.detach().cpu().numpy())
         
-        model.eval()
+        classifier.eval()
         correct = 0
         count = 0
         with torch.no_grad():
@@ -168,14 +192,60 @@ if __name__ == '__main__':
 
         print(f"Epoch {epoch+1}/{epochs} loss: {np.mean(epoch_losses)} train accuracy: {train_accuracy} test accuracy: {test_accuracy}")
 
-    # Visualize the embeddings
-    f, ax = plt.subplots(9,9,figsize=(10, 10))
-    for i in range(9):
-        for j in range(9):
-            code = torch.tensor(np.float32([i-4,j-4,0,0])).to(device)
-            image = model.decode(code.to(device)).detach().cpu().numpy().squeeze()
-            ax[i][j].imshow(image, cmap='gray')
-    plt.show()
+
+    # Head probing loop
+    print("### Head-probing ###")
+    # read base model and load it
+    classifier.load_state_dict(torch.load("models/base_model.pth"))
+    for epoch in range(epochs):
+        
+        classifier.train()
+        # Freeze all layers except the final layer
+        for param in model.parameters():
+            param.requires_grad = False
+
+        for param in model.fc1.parameters():
+            param.requires_grad = True
+
+        epoch_losses = []
+        for inputs, labels in cl_train_loader_2:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            optimizer.zero_grad()
+            outputs = classifier(model.encode(inputs))
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            epoch_losses.append(loss.detach().cpu().numpy())
+        
+        classifier.eval()
+        correct = 0
+        count = 0
+        with torch.no_grad():
+            for inputs, labels in cl_train_loader_2:
+                outputs = classifier(model.encode(inputs))
+                correct += (outputs.argmax(1) == labels).type(torch.float).sum().item()
+                count += len(labels)
+            train_accuracy = correct / count
+
+            for inputs, labels in cl_test_loader_2:
+                outputs = classifier(model.encode(inputs))
+                correct += (outputs.argmax(1) == labels).type(torch.float).sum().item()
+                count += len(labels)
+            test_accuracy = correct / count
+
+        print(f"Epoch {epoch+1}/{epochs} loss: {np.mean(epoch_losses)} train accuracy: {train_accuracy} test accuracy: {test_accuracy}")
+
+
+
+    # # Visualize the embeddings
+    # f, ax = plt.subplots(9,9,figsize=(10, 10))
+    # for i in range(9):
+    #     for j in range(9):
+    #         code = torch.tensor(np.float32([i-4,j-4,0,0])).to(device)
+    #         image = model.decode(code.to(device)).detach().cpu().numpy().squeeze()
+    #         ax[i][j].imshow(image, cmap='gray')
+    # plt.show()
 
 
     images = train_dataset_2[:12]
